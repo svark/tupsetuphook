@@ -54,7 +54,6 @@ pub fn pipserve(threaddone: Arc<AtomicBool>, pid: u32, out: &std::path::PathBuf)
                  while let Ok(sz) = server.read(&mut buf) {
                      if sz > 0 {
                          let _ = file.write(&buf[..sz]);
-                         let _ = file.write("_\n".as_bytes());
                      } else {
                          break;
                      }
@@ -124,17 +123,18 @@ pub fn main() {
         use std::ffi::{CString};
         let cl = CString::new(commandline.as_str()).unwrap();
         println!("starting :{:?}", cl);
-        //        let dllpath = which("tupinject64.dll").expect("tupinject64.dll should be in path");
         use std::env;
-        // use std::path::{Path, PathBuf};
        let paths = match env::var_os("PATH") {
            Some(path) => env::split_paths(&path).collect::<Vec<_>>(),
            None => vec![],
         };
         let paths =   paths.iter().map(|pb| pb.as_path().join("tupinject64.dll")).find(|x| x.is_file()).expect("tupinjec64.dll not found in path");
 
+        let dllpath = std::ffi::CString::new(paths.to_str().unwrap());
+        println!("with dll:{:?}", &dllpath);
+        let dllpathptr = dllpath.unwrap();
         let dllpaths : [*const i8;1]= [
-            paths.to_str().unwrap().as_ptr() as _,
+            dllpathptr.as_bytes_with_nul().as_ptr() as _,
         ];
         if detours::DetourCreateProcessWithDllsA(
             null as _,
@@ -144,7 +144,6 @@ pub fn main() {
             TRUE,
             dwflags,
             null as _,
-            // "C:\\Apps\\tuprsws\\target\\debug\0".as_ptr() as _,
             null as _,
             (&si as *const _) as _,
             &pi as *const _ as _,
