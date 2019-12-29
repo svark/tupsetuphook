@@ -7,7 +7,7 @@ use std::sync::Arc;
 use winapi::shared::guiddef::GUID;
 use winapi::shared::minwindef::{DWORD, FALSE, TRUE};
 use winapi::um::handleapi::CloseHandle;
-use winapi::um::processthreadsapi::{ExitProcess, GetExitCodeProcess, ResumeThread};
+use winapi::um::processthreadsapi::{GetExitCodeProcess, ResumeThread};
 use winapi::um::processthreadsapi::{PROCESS_INFORMATION, STARTUPINFOA};
 use winapi::um::synchapi::WaitForSingleObject;
 use winapi::um::winbase::{CREATE_DEFAULT_ERROR_MODE, CREATE_SUSPENDED, INFINITE};
@@ -59,7 +59,7 @@ pub fn pipserve(threaddone: Arc<AtomicBool>, pid: u32, out: &std::path::PathBuf)
     });
 }
 
-pub fn spawn(commandline: String, outdir : String )
+pub fn spawn(commandline: String, outdir : String ) -> DWORD
 {
   unsafe {
       let mut si: STARTUPINFOA = std::mem::zeroed();
@@ -112,7 +112,7 @@ pub fn spawn(commandline: String, outdir : String )
                 "TRACEBLD: DetourCreateProcessWithDllEx failed with {}\n",
                 winapi::um::errhandlingapi::GetLastError()
             );
-            ExitProcess(9007);
+            return 9007;
         }
       let done = Arc::new(AtomicBool::new(false));
       pipserve(
@@ -130,10 +130,11 @@ pub fn spawn(commandline: String, outdir : String )
               "TRACEBLD: GetExitCodeProcess failed: {}\n",
               winapi::um::errhandlingapi::GetLastError()
           );
-          // return 9008;
+          return 9008;
       }
 
       CloseHandle(pi.hProcess);
       CloseHandle(pi.hThread);
-    }
+      dw_result
+  }
 }

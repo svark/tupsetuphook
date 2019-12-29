@@ -7,5 +7,6 @@ pub fn main() {
     let outdir = args[0].clone();
     let commandlinevec: Vec<_> = std::env::args().skip(2).collect();
     let commandline = commandlinevec.join(" ");
-    spawn::spawn(commandline, outdir);
+    let exit_code = spawn::spawn(commandline, outdir);
+    std::process::exit(exit_code as _);
 }
