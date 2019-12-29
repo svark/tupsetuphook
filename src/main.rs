@@ -34,38 +34,39 @@ pub fn pipserve(threaddone: Arc<AtomicBool>, pid: u32, out: &std::path::PathBuf)
     use named_pipe::PipeOptions;
     use std::thread;
     pub const TBLOG_PIPE_NAME: &'static str = "\\\\.\\pipe\\tracebuild\0";
-    use std::io::{Read, Write};
     use std::fs::File;
     use std::fs::OpenOptions;
+    use std::io::{Read, Write};
     let o = out.clone();
     let o = o.join(format!("evts-{}", pid));
-    let mut file: File = OpenOptions::new()
-        .write(true).create(true)
-        .open(o).unwrap();
+    let mut file: File = OpenOptions::new().write(true).create(true).open(o).unwrap();
     thread::spawn(move || {
         let mut buf = [0u8; 512];
-        'outer: while !threaddone.load(Ordering::Acquire){
+        'outer: while !threaddone.load(Ordering::Acquire) {
             let mut cs = PipeOptions::new(TBLOG_PIPE_NAME)
                 .open_mode(named_pipe::OpenMode::Duplex)
                 .single()
                 .unwrap();
             while let Ok(mut server) = cs.wait() {
-                 let _ = server.write("s".as_bytes());
-                 while let Ok(sz) = server.read(&mut buf) {
-                     if sz > 0 {
-                         let _ = file.write(&buf[..sz]);
-                     } else {
-                         break;
-                     }
-                 }
+                let _ = server.write("s".as_bytes());
+                while let Ok(sz) = server.read(&mut buf) {
+                    if sz > 0 {
+                        let _ = file.write(&buf[..sz]);
+                    } else {
+                        break;
+                    }
+                }
                 match server.disconnect() {
-                     Err(e) => {eprintln!("failed:{}", e); break;},
-                     Ok(csnew) => {cs = csnew},
+                    Err(e) => {
+                        eprintln!("failed:{}", e);
+                        break;
+                    }
+                    Ok(csnew) => cs = csnew,
                 }
                 if threaddone.load(Ordering::Acquire) {
                     break 'outer;
                 }
-             }
+            }
         }
     });
 }
@@ -85,7 +86,7 @@ pub fn main() {
         return;
     }
     let outdir = args[0].clone();
-    let  commandlinevec: Vec<_> = std::env::args().skip(2).collect();
+    let commandlinevec: Vec<_> = std::env::args().skip(2).collect();
     let commandline = commandlinevec.join(" ");
     unsafe {
         let mut si: STARTUPINFOA = STARTUPINFOA {
@@ -120,22 +121,32 @@ pub fn main() {
             std::mem::size_of::<PROCESS_INFORMATION>(),
         );
         si.cb = std::mem::size_of::<STARTUPINFOA>() as _;
-        use std::ffi::{CString};
+        use std::ffi::CString;
         let cl = CString::new(commandline.as_str()).unwrap();
         println!("starting :{:?}", cl);
         use std::env;
-       let paths = match env::var_os("PATH") {
-           Some(path) => env::split_paths(&path).collect::<Vec<_>>(),
-           None => vec![],
+        let mut paths = match env::var_os("PATH") {
+            Some(path) => env::split_paths(&path).collect::<Vec<_>>(),
+            None => vec![],
         };
-        let paths =   paths.iter().map(|pb| pb.as_path().join("tupinject64.dll")).find(|x| x.is_file()).expect("tupinjec64.dll not found in path");
+        paths.push(std::path::PathBuf::from("."));
+        paths.push(
+            std::path::PathBuf::from(std::env::args().next().unwrap())
+                .parent()
+                .unwrap()
+                .to_path_buf(),
+        );
+
+        let paths = paths
+            .iter()
+            .map(|pb| pb.as_path().join("tupinject64.dll"))
+            .find(|x| x.is_file())
+            .expect("tupinjec64.dll not found in path");
 
         let dllpath = std::ffi::CString::new(paths.to_str().unwrap());
         println!("with dll:{:?}", &dllpath);
         let dllpathptr = dllpath.unwrap();
-        let dllpaths : [*const i8;1]= [
-            dllpathptr.as_bytes_with_nul().as_ptr() as _,
-        ];
+        let dllpaths: [*const i8; 1] = [dllpathptr.as_bytes_with_nul().as_ptr() as _];
         if detours::DetourCreateProcessWithDllsA(
             null as _,
             cl.as_ptr() as *mut _,
@@ -171,7 +182,11 @@ pub fn main() {
         // } else
         {
             let done = Arc::new(AtomicBool::new(false));
-            pipserve(done.clone(), pi.dwProcessId, &std::path::PathBuf::from(outdir));
+            pipserve(
+                done.clone(),
+                pi.dwProcessId,
+                &std::path::PathBuf::from(outdir),
+            );
             ResumeThread(pi.hThread);
 
             WaitForSingleObject(pi.hProcess, INFINITE);
