@@ -5,6 +5,9 @@ version = "0.1.0"
 authors = ["Arun Sivaramakrishnan <arun.sivaramakrishnan@gmail.com>"]
 # links = "detours"
 
+[lib]
+name = "spawn"
+path = "lib/mod.rs"
 
 [[bin]]
 name = "tupspawn"
