@@ -3,7 +3,6 @@ edition = "2018"
 name = "tupsetuphook"
 version = "0.1.0"
 authors = ["Arun Sivaramakrishnan <arun.sivaramakrishnan@gmail.com>"]
-# links = "detours"
 
 [lib]
 name = "spawn"
