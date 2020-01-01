@@ -79,15 +79,14 @@ pub fn spawn(commandline: String, outdir : String ) -> DWORD
               .unwrap()
               .to_path_buf(),
       );
-
-      let paths = paths
+      let dll64path= paths
           .iter()
           .map(|pb| pb.as_path().join("tupinject64.dll"))
           .find(|x| x.is_file())
-          .expect("tupinjec64.dll not found in path");
+          .expect("tupinject64.dll not found in path");
 
-      let dllpath = std::ffi::CString::new(paths.to_str().unwrap());
-      println!("with dll:{:?}", &dllpath);
+      let dllpath = std::ffi::CString::new(dll64path.to_str().unwrap());
+      // println!("with dll:{:?}", &dllpath);
       let dllpathptr = dllpath.unwrap();
       let dllpaths: [*const i8; 1] = [dllpathptr.as_bytes_with_nul().as_ptr() as _];
       let dwflags: DWORD = CREATE_DEFAULT_ERROR_MODE | CREATE_SUSPENDED;
