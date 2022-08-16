@@ -13,10 +13,10 @@ name = "tupspawn"
 path = "src/main.rs"
 
 [dependencies]
-named_pipe = "0.4.1"
+#named_pipe = "0.4.1"
 # which = "3.1.0"
-#tupinject = {path = "../tupinject"}
-# widestring="0.4.0"
-# lazy_static = "1.4.0"
-winapi = { version =  "0.3.6", features = ["winnt", "processthreadsapi", "fileapi", "winbase", "synchapi", "handleapi", "libloaderapi", "errhandlingapi"] }
-detours-sys = {git = "https://github.com/DianaNites/detours", features = ["buildtime_bindgen"] }
+tupinject = {path = "../tupinject"}
+wchar = "0.11.0"
+lazy_static = "1.4.0"
+winapi = { version = "0.3.6", features = ["winnt", "processthreadsapi", "fileapi", "winbase", "synchapi", "handleapi", "libloaderapi", "errhandlingapi"] }
+detours-sys = { git = "https://github.com/svark/detours", features = ["buildtime_bindgen"] }
