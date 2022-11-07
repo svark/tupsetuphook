@@ -55,7 +55,7 @@ impl Command {
     pub fn new(program: &OsStr, args: Vec<OsString>) -> Command {
         Command {
             program: program.to_os_string(),
-            args: args,
+            args,
             env: None,
             cwd: None,
             outdir: ".".to_string(),
@@ -164,7 +164,7 @@ impl Command {
             let handle = Handle::new(file.into_raw_handle());
             use winapi::um::winnt::DUPLICATE_SAME_ACCESS;
             let dup = handle.duplicate(Handle::new(pi.hProcess), 0, true, DUPLICATE_SAME_ACCESS);
-            if let Err(_) = dup {
+            if  dup.is_err() {
                 eprintln!(
                     "TRACEBLD: file handle duplication failed: {}\n",
                     winapi::um::errhandlingapi::GetLastError()
@@ -251,9 +251,9 @@ fn make_command_line(prog: &OsStr, args: &[OsString]) -> std::io::Result<Vec<u16
             cmd.push('"' as u16);
         }
 
-        let mut iter = arg.encode_wide();
+        let iter = arg.encode_wide();
         let mut backslashes: usize = 0;
-        while let Some(x) = iter.next() {
+        for x in iter{
             if x == '\\' as u16 {
                 backslashes += 1;
             } else {
