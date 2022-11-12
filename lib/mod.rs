@@ -164,7 +164,7 @@ impl Command {
             let handle = Handle::new(file.into_raw_handle());
             use winapi::um::winnt::DUPLICATE_SAME_ACCESS;
             let dup = handle.duplicate(Handle::new(pi.hProcess), 0, true, DUPLICATE_SAME_ACCESS);
-            if  dup.is_err() {
+            if dup.is_err() {
                 eprintln!(
                     "TRACEBLD: file handle duplication failed: {}\n",
                     winapi::um::errhandlingapi::GetLastError()
@@ -253,7 +253,7 @@ fn make_command_line(prog: &OsStr, args: &[OsString]) -> std::io::Result<Vec<u16
 
         let iter = arg.encode_wide();
         let mut backslashes: usize = 0;
-        for x in iter{
+        for x in iter {
             if x == '\\' as u16 {
                 backslashes += 1;
             } else {
