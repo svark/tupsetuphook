@@ -5,7 +5,7 @@ version = "0.1.0"
 authors = ["Arun Sivaramakrishnan <arun.sivaramakrishnan@gmail.com>"]
 
 [lib]
-name = "spawn"
+name = "tupexec"
 path = "lib/mod.rs"
 
 [[bin]]
@@ -13,8 +13,6 @@ name = "tupspawn"
 path = "src/main.rs"
 
 [dependencies]
-#named_pipe = "0.4.1"
-# which = "3.1.0"
 tupinject = {path = "../tupinject"}
 wchar = "0.11.0"
 lazy_static = "1.4.0"

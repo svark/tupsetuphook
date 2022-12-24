@@ -14,7 +14,7 @@ pub fn main() {
     use std::ffi::OsStr;
     let exit_code = spawn::Command::new(OsStr::new(cmd[0].as_str()), cmdargs)
         .outdir(outdir.as_str())
-        .spawn()
+        .execute()
         .unwrap();
     std::process::exit(exit_code as _);
 }

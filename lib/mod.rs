@@ -4,7 +4,7 @@ extern crate winapi;
 //extern crate lazy_static;
 // use std::ffi::CString;
 use winapi::shared::guiddef::GUID;
-use winapi::shared::minwindef::{BOOL, DWORD, FALSE, TRUE};
+use winapi::shared::minwindef::{BOOL, DWORD, FALSE, PROC, TRUE};
 use winapi::um::handleapi::CloseHandle;
 use winapi::um::processthreadsapi::{GetCurrentProcess, GetExitCodeProcess, ResumeThread};
 use winapi::um::processthreadsapi::{PROCESS_INFORMATION, STARTUPINFOW};
@@ -19,14 +19,53 @@ pub static S_TRAP_GUID: GUID = GUID {
 };
 
 use std::collections::HashMap;
+use std::default::Default;
 use std::ffi::{OsStr, OsString};
-
+use std::process::{ChildStderr, ChildStdin, ChildStdout};
+#[derive(Default, Clone, Debug)]
 pub struct Command {
     program: OsString,
     args: Vec<OsString>,
     env: Option<HashMap<OsString, OsString>>,
     cwd: Option<OsString>,
-    outdir: String,
+    outdir: OsString,
+}
+
+pub struct Child {
+    process: PROCESS_INFORMATION,
+    stderr: Option<ChildStderr>,
+    stdout: Option<ChildStdout>,
+    stdin: Option<ChildStdin>,
+}
+
+impl Child {
+    pub fn new(pi: PROCESS_INFORMATION) -> Child {
+        Child {
+            process: pi,
+            stderr: None,
+            stdout: None,
+            stdin: None,
+        }
+    }
+    pub fn wait(self) -> ExitStatus {
+        unsafe {
+            ResumeThread(self.process.hThread);
+
+            WaitForSingleObject(self.process.hProcess, INFINITE);
+            let mut dw_result: DWORD = 0;
+            if FALSE == GetExitCodeProcess(self.process.hProcess, &mut dw_result as *mut _ as _) {
+                eprintln!(
+                    "TRACEBLD: GetExitCodeProcess failed: {}\n",
+                    winapi::um::errhandlingapi::GetLastError()
+                );
+                std::process::exit(9008);
+            }
+
+            CloseHandle(self.process.hThread);
+            CloseHandle(self.process.hProcess);
+            ExitStatus::from(dw_result)
+        }
+    }
 }
 
 fn mk_key(s: &OsStr) -> OsString {
@@ -58,7 +97,23 @@ impl Command {
             args,
             env: None,
             cwd: None,
-            outdir: ".".to_string(),
+            outdir: ".".into(),
+            ..Default::default()
+        }
+    }
+
+    pub fn from_std_cmd(cmd: std::process::Command) -> Command {
+        Command {
+            program: OsString::from(cmd.get_program()),
+            args: cmd.get_args().into_iter().map(|x| x.to_owned()).collect(),
+            env: Some(
+                cmd.get_envs()
+                    .into_iter()
+                    .map(|(x, y)| (x.to_owned(), y.unwrap().to_owned()))
+                    .collect(),
+            ),
+            cwd: cmd.get_current_dir().map(|x| OsString::from(x)),
+            outdir: ".".into(),
         }
     }
 
@@ -96,12 +151,12 @@ impl Command {
         self.cwd = Some(dir.to_os_string());
         self
     }
-    pub fn outdir(&mut self, outdir: &str) -> &mut Self {
-        self.outdir = outdir.to_string();
+    pub fn outdir(&mut self, outdir: &OsStr) -> &mut Self {
+        self.outdir = outdir.to_os_string();
         self
     }
 
-    pub fn spawn(&mut self) -> io::Result<DWORD> {
+    pub fn spawn(&mut self) -> io::Result<Child> {
         unsafe {
             let mut si: STARTUPINFOW = std::mem::zeroed();
             si.cb = std::mem::size_of::<STARTUPINFOW>() as _;
@@ -115,7 +170,7 @@ impl Command {
             };
             paths.push(std::path::PathBuf::from("."));
             paths.push(
-                std::path::PathBuf::from(std::env::args().next().unwrap())
+                std::path::PathBuf::from(env::args().next().unwrap())
                     .parent()
                     .unwrap()
                     .to_path_buf(),
@@ -189,21 +244,8 @@ impl Command {
                 std::process::exit(9008);
             }
 
-            ResumeThread(pi.hThread);
-
-            WaitForSingleObject(pi.hProcess, INFINITE);
-            let mut dw_result: DWORD = 0;
-            if FALSE == GetExitCodeProcess(pi.hProcess, &mut dw_result as *mut _ as _) {
-                eprintln!(
-                    "TRACEBLD: GetExitCodeProcess failed: {}\n",
-                    winapi::um::errhandlingapi::GetLastError()
-                );
-                std::process::exit(9008);
-            }
-
-            CloseHandle(pi.hThread);
-            CloseHandle(pi.hProcess);
-            Ok(dw_result)
+            let child = Child::new(pi);
+            Ok(child)
         }
     }
 }
@@ -212,10 +254,10 @@ use std::os::raw::c_void;
 use std::os::windows::ffi::OsStrExt;
 // use std::ffi::{OsString};
 
-fn ensure_no_nuls<T: AsRef<OsStr>>(str: T) -> std::io::Result<T> {
+fn ensure_no_nuls<T: AsRef<OsStr>>(str: T) -> io::Result<T> {
     if str.as_ref().encode_wide().any(|b| b == 0) {
-        Err(std::io::Error::new(
-            std::io::ErrorKind::InvalidInput,
+        Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
             "nul byte found in provided data",
         ))
     } else {
@@ -223,7 +265,7 @@ fn ensure_no_nuls<T: AsRef<OsStr>>(str: T) -> std::io::Result<T> {
     }
 }
 
-fn make_command_line(prog: &OsStr, args: &[OsString]) -> std::io::Result<Vec<u16>> {
+fn make_command_line(prog: &OsStr, args: &[OsString]) -> io::Result<Vec<u16>> {
     // Encode the command and arguments in a command line string such
     // that the spawned process may recover them using CommandLineToArgvW.
     let mut cmd: Vec<u16> = Vec::new();
@@ -235,7 +277,7 @@ fn make_command_line(prog: &OsStr, args: &[OsString]) -> std::io::Result<Vec<u16
     cmd.push('\0' as u16);
     return Ok(cmd);
 
-    fn append_arg(cmd: &mut Vec<u16>, arg: &OsStr) -> std::io::Result<()> {
+    fn append_arg(cmd: &mut Vec<u16>, arg: &OsStr) -> io::Result<()> {
         // If an argument has 0 characters then we need to quote it to ensure
         // that it actually gets passed through on the command line or otherwise
         // it will be dropped entirely when parsed on the other end.
@@ -279,9 +321,7 @@ fn make_command_line(prog: &OsStr, args: &[OsString]) -> std::io::Result<Vec<u16
     }
 }
 
-fn make_envp(
-    env: Option<&std::collections::HashMap<OsString, OsString>>,
-) -> std::io::Result<(*mut c_void, Vec<u16>)> {
+fn make_envp(env: Option<&HashMap<OsString, OsString>>) -> io::Result<(*mut c_void, Vec<u16>)> {
     // On Windows we pass an "environment block" which is not a char**, but
     // rather a concatenation of null-terminated k=v\0 sequences, with a final
     // \0 to terminate.
@@ -302,7 +342,7 @@ fn make_envp(
     }
 }
 
-fn make_dirp(d: Option<&OsString>) -> std::io::Result<(*const u16, Vec<u16>)> {
+fn make_dirp(d: Option<&OsString>) -> io::Result<(*const u16, Vec<u16>)> {
     match d {
         Some(dir) => {
             let mut dir_str: Vec<u16> = ensure_no_nuls(dir)?.encode_wide().collect();
@@ -358,6 +398,7 @@ macro_rules! impl_is_minus_one {
 
 impl_is_minus_one! { i8 i16 i32 i64 isize }
 use std::io;
+use std::process::Stdio;
 
 pub fn cvt<T: IsMinusOne>(t: T) -> io::Result<T> {
     if t.is_minus_one() {
