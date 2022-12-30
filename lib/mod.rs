@@ -4,25 +4,26 @@ extern crate winapi;
 //extern crate lazy_static;
 // use std::ffi::CString;
 use winapi::shared::guiddef::GUID;
-use winapi::shared::minwindef::{BOOL, DWORD, FALSE, PROC, TRUE};
+use winapi::shared::minwindef::{BOOL, DWORD, FALSE, TRUE};
 use winapi::um::handleapi::CloseHandle;
 use winapi::um::processthreadsapi::{GetCurrentProcess, GetExitCodeProcess, ResumeThread};
 use winapi::um::processthreadsapi::{PROCESS_INFORMATION, STARTUPINFOW};
 use winapi::um::synchapi::WaitForSingleObject;
 use winapi::um::winbase::{CREATE_DEFAULT_ERROR_MODE, CREATE_SUSPENDED, INFINITE};
-
+use winapi::um::winbase::{STD_ERROR_HANDLE, STD_INPUT_HANDLE, STD_OUTPUT_HANDLE};
+use winapi::um::winnt::DUPLICATE_SAME_ACCESS;
 pub static S_TRAP_GUID: GUID = GUID {
     Data1: 0x9640b7b0,
     Data2: 0xca4d,
     Data3: 0x4d61,
     Data4: [0x9a, 0x27, 0x79, 0xc7, 0x9, 0xa3, 0x1e, 0xb0],
 };
-
+use winapi::shared::winerror::ERROR_INVALID_HANDLE;
+//pub const INVALID_HANDLE_VALUE: HANDLE = unsafe {mem::transmute(!0)};
 use std::collections::HashMap;
-use std::default::Default;
 use std::ffi::{OsStr, OsString};
-use std::process::{ChildStderr, ChildStdin, ChildStdout};
-#[derive(Default, Clone, Debug)]
+use winapi::um::handleapi::INVALID_HANDLE_VALUE;
+#[derive(Debug)]
 pub struct Command {
     program: OsString,
     args: Vec<OsString>,
@@ -33,18 +34,12 @@ pub struct Command {
 
 pub struct Child {
     process: PROCESS_INFORMATION,
-    stderr: Option<ChildStderr>,
-    stdout: Option<ChildStdout>,
-    stdin: Option<ChildStdin>,
 }
 
 impl Child {
     pub fn new(pi: PROCESS_INFORMATION) -> Child {
         Child {
             process: pi,
-            stderr: None,
-            stdout: None,
-            stdin: None,
         }
     }
     pub fn wait(self) -> ExitStatus {
@@ -98,7 +93,6 @@ impl Command {
             env: None,
             cwd: None,
             outdir: ".".into(),
-            ..Default::default()
         }
     }
 
@@ -156,10 +150,35 @@ impl Command {
         self
     }
 
+    pub fn get_handle(handle_id: DWORD) -> io::Result<HANDLE> {
+        let handle = unsafe { GetStdHandle(handle_id) };
+        if handle == INVALID_HANDLE_VALUE {
+            Err(io::Error::last_os_error())
+        } else if handle.is_null() {
+            Err(io::Error::from_raw_os_error(ERROR_INVALID_HANDLE as i32))
+        } else {
+            Ok(handle)
+        }
+    }
+    pub fn to_handle(stdio_id: DWORD) -> io::Result<Handle> {
+        let io = Self::get_handle(stdio_id)?;
+        let cur_proc = unsafe { GetCurrentProcess() };
+        let ret = Handle::new(io).duplicate(Handle::new(cur_proc), 0, true, DUPLICATE_SAME_ACCESS);
+        ret
+    }
+
     pub fn spawn(&mut self) -> io::Result<Child> {
         unsafe {
             let mut si: STARTUPINFOW = std::mem::zeroed();
             si.cb = std::mem::size_of::<STARTUPINFOW>() as _;
+            {
+                let stdin = Self::to_handle(STD_INPUT_HANDLE)?;
+                let stdout = Self::to_handle(STD_OUTPUT_HANDLE)?;
+                let stderr = Self::to_handle(STD_ERROR_HANDLE)?;
+                si.hStdInput = stdin.raw();
+                si.hStdOutput = stdout.raw();
+                si.hStdError = stderr.raw();
+            }
             let pi: PROCESS_INFORMATION = std::mem::zeroed();
             let cl = make_command_line(&self.program, &self.args)?;
             println!("starting :{:?}", cl);
@@ -217,7 +236,6 @@ impl Command {
             let file: File = OpenOptions::new().write(true).create(true).open(o).unwrap();
             use std::os::windows::io::IntoRawHandle;
             let handle = Handle::new(file.into_raw_handle());
-            use winapi::um::winnt::DUPLICATE_SAME_ACCESS;
             let dup = handle.duplicate(Handle::new(pi.hProcess), 0, true, DUPLICATE_SAME_ACCESS);
             if dup.is_err() {
                 eprintln!(
@@ -398,7 +416,6 @@ macro_rules! impl_is_minus_one {
 
 impl_is_minus_one! { i8 i16 i32 i64 isize }
 use std::io;
-use std::process::Stdio;
 
 pub fn cvt<T: IsMinusOne>(t: T) -> io::Result<T> {
     if t.is_minus_one() {
@@ -409,6 +426,7 @@ pub fn cvt<T: IsMinusOne>(t: T) -> io::Result<T> {
 }
 
 use winapi::um::handleapi::DuplicateHandle;
+use winapi::um::processenv::GetStdHandle;
 
 impl Handle {
     fn raw(&self) -> HANDLE {

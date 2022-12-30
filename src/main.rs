@@ -1,3 +1,5 @@
+use std::ffi::OsString;
+
 pub fn main() {
     let args: Vec<_> = std::env::args().skip(1).collect();
     if args.len() < 2 {
@@ -12,9 +14,9 @@ pub fn main() {
         .collect();
 
     use std::ffi::OsStr;
-    let exit_code = spawn::Command::new(OsStr::new(cmd[0].as_str()), cmdargs)
-        .outdir(outdir.as_str())
-        .execute()
-        .unwrap();
-    std::process::exit(exit_code as _);
+    let exit_code = tupexec::Command::new(OsStr::new(cmd[0].as_str()), cmdargs)
+        .outdir(OsString::from(outdir.as_str()).as_os_str() )
+        .spawn()
+        .unwrap().wait();
+    std::process::exit(exit_code.code().unwrap());
 }
