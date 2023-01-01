@@ -15,8 +15,9 @@ pub fn main() {
 
     use std::ffi::OsStr;
     let exit_code = tupexec::Command::new(OsStr::new(cmd[0].as_str()), cmdargs)
-        .outdir(OsString::from(outdir.as_str()).as_os_str() )
+        .outdir(OsString::from(outdir.as_str()).as_os_str())
         .spawn()
-        .unwrap().wait();
+        .unwrap()
+        .wait();
     std::process::exit(exit_code.code().unwrap());
 }

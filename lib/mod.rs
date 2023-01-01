@@ -38,9 +38,7 @@ pub struct Child {
 
 impl Child {
     pub fn new(pi: PROCESS_INFORMATION) -> Child {
-        Child {
-            process: pi,
-        }
+        Child { process: pi }
     }
     pub fn wait(self) -> ExitStatus {
         unsafe {
